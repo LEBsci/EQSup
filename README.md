@@ -4,4 +4,4 @@ Cosas a incluir:
 * Graficos sencillos de voltametrías
 * Graficos publicables
 * Analizador de isoterma de Frumkin (planos base y escalonadas)
-* Ajustes de impedancia usando LEVMpy
+* Ajustes de impedancia usando [LEVMpy](https://github.com/jzmnd/LEVMpy)
