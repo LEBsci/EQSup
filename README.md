@@ -1,5 +1,4 @@
-# EQSUP
-
+# EQSup
 Repositiorio de utilidades típicas para el grupo de electroquímica de superficies de la UA. Principalmente en Python. 
 Cosas a incluir:
 * Graficos sencillos de voltametrías
