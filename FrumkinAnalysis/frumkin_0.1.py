@@ -12,5 +12,5 @@ print(cv)
 # cv.to_csv('out.csv')
 '''
 version 0.1
-ready to plot one cv
+ready to plot one cv as a scatter plot but it is not ordered
 '''
