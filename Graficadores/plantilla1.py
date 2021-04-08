@@ -25,7 +25,7 @@ miller = pt.index.array.unique().dropna()   #Esto hace una lista de cuantos 'ele
 
 for n in miller:    #Ciclo usando los valores de miller
     plt.plot(pt.loc[n].iloc[:,0], pt.loc[n].iloc[:,5], label=n) #En el ciclo se grafica cada uno de los 'electrodos' y se guardan
-plt.axhline(0, 0, 1, c = 'red')   #Se grafica el eje cero
+plt.axhline(0, 0, 1, c = 'blue')   #Se grafica el eje cero
 plt.xlabel('$E$/V vs Pd/H') #Nombre de eje X
 plt.ylabel(r'$i\,/\,\mathrm{\mu A}$')   #Nombre de eje Y
 plt.legend()    #Se ubica la leyenda en el mejor lugar automaticamente
