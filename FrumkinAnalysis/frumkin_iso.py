@@ -36,3 +36,6 @@ plt.scatter(cvm.iloc[0:ehmin_index[0],0], cvm.iloc[0:ehmin_index[0],1]) # Plot s
 plt.show()
 # print(ehmin_index[0])
 # cvraw.to_csv('out.csv')
+'''
+pendiente restar la doble capa
+'''
