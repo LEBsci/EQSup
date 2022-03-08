@@ -18,6 +18,7 @@ plt.title('Pt(554)')
 plt.close()
 
 cvNeg = cv[cv[:,1] < 0] #Boolean mask para encontrar los valores de corriente negativa
+np.savetxt("negative.txt", cvNeg)
 plt.scatter(cvNeg[:,0], cvNeg[:,1]*10e6, c='r')
 plt.axhline(0, 0, 1, c = 'black')   #Se grafica el eje cero
 plt.xlabel('$E$/V vs Pd/H') #Nombre de eje X
@@ -27,6 +28,7 @@ plt.title('Pt(554) Negative')
 plt.show()
 
 cvPos = cv[cv[:,1] > 0]
+np.savetxt(os.path.join(THIS_FOLDER, 'positive.txt'), cvPos)
 plt.scatter(cvPos[:,0], cvPos[:,1]*10e6, c='r')
 plt.axhline(0, 0, 1, c = 'black')   #Se grafica el eje cero
 plt.xlabel('$E$/V vs Pd/H') #Nombre de eje X
