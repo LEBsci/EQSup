@@ -1,8 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.interpolate import splprep, splev
-import pandas as pd
-import glob
+import glob, os
 from matplotlib import cm
 from matplotlib.colors import Normalize
 
@@ -23,30 +22,30 @@ plt.rc('legend', fontsize=SMALL_SIZE)    # legend fontsize
 plt.rc('figure', titlesize=SMALL_SIZE)  # fontsize of the figure title
 plt.rc('figure', figsize=(8,8))
 
-
-
-ifiles = sorted(glob.glob('*C.txt')) #First step import data files
+ifiles = sorted(glob.glob("*C.txt")) #First step import data files
 cycle = 3 #voltammetric cycle to use
 EHmin=0.48 # Este es el potencial al que empieza a adsorberse H
 
 for i in range(0,1): #will do a for cycle for the whole system
     data=np.loadtxt(ifiles[i], skiprows=1)
     
-    cvpos = data[data[:,2*cycle-1] > 0]
-    cvpos = cvpos[cvpos[:,2*(cycle-1)] <= 0.7]
+    cvpos = data[(data[:,2*cycle-1] > 0)*(data[:,2*(cycle-1)] <= 0.7)] #remove higher than 0.7 to avoid repeated values and select only positive currents
 
     cvneg = data[data[:,2*cycle-1] < 0]
-    cvneg = sorted(cvneg, key=lambda y: y[4])
-    print(cvneg)
+    cvneg = cvneg[cvneg[:,2*(cycle-1)].argsort()] #sort in ascending order
+    
+    
 
     tckp, u = splprep([cvpos[:,2*(cycle-1)], cvpos[:,2*cycle-1]], s=0) #Positive interpolation
     cvposnew = splev(u, tckp, der=0) #Interpolated current results in two values
     
-    # tckn, v = splprep([cvneg[:,2*(cycle-1)], cvneg[:,2*cycle-1]], s=0)
-    # cvpnegnew = splev(v, tckn, der=0)
+    tckn, v = splprep([cvneg[:,2*(cycle-1)], cvneg[:,2*cycle-1]], s=0)
+    cvnegnew = splev(v, tckn, der=0)
 
-    # plt.plot(cvposnew[0],cvposnew[1])
-    # plt.show()
+    plt.plot(cvnegnew[0], cvnegnew[1])
+    plt.show()
+
+
 
 
 
