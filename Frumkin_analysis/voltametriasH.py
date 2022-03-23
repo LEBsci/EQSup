@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from scipy.interpolate import splprep, splev
-import glob, os
+from scipy.interpolate import splrep, splev, splint
+import glob, os, random
 from matplotlib import cm
 from matplotlib.colors import Normalize
 
@@ -22,28 +22,62 @@ plt.rc('legend', fontsize=SMALL_SIZE)    # legend fontsize
 plt.rc('figure', titlesize=SMALL_SIZE)  # fontsize of the figure title
 plt.rc('figure', figsize=(8,8))
 
-ifiles = sorted(glob.glob("*C.txt")) #First step import data files
-cycle = 3 #voltammetric cycle to use
-EHmin=0.48 # Este es el potencial al que empieza a adsorberse H
 
-for i in range(0,1): #will do a for cycle for the whole system
-    data=np.loadtxt(ifiles[i], skiprows=1)
-    
-    cvpos = data[(data[:,2*cycle-1] > 0)*(data[:,2*(cycle-1)] <= 0.7)] #remove higher than 0.7 to avoid repeated values and select only positive currents
+def isog(cycle, lowerVertex, upperVertex):
+    ifiles = sorted(glob.glob("*C.txt")) #First step import data files
+    q = np.zeros(len(ifiles))
 
-    cvneg = data[data[:,2*cycle-1] < 0]
-    cvneg = cvneg[cvneg[:,2*(cycle-1)].argsort()] #sort in ascending order
-    
-    
+    for i in range(0,len(ifiles)): #will do a for cycle for the whole system
+        data=np.loadtxt(ifiles[i], skiprows=1)
+        
 
-    tckp, u = splprep([cvpos[:,2*(cycle-1)], cvpos[:,2*cycle-1]], s=0) #Positive interpolation
-    cvposnew = splev(u, tckp, der=0) #Interpolated current results in two values
-    
-    tckn, v = splprep([cvneg[:,2*(cycle-1)], cvneg[:,2*cycle-1]], s=0)
-    cvnegnew = splev(v, tckn, der=0)
+        cvpos = data[(data[:,2*cycle-1] > 0)] #Select positive currents 
+        limpos = np.argmax(cvpos[:,2*(cycle-1)]) #Find maximum potential to discard duplicates
+        
 
-    plt.plot(cvnegnew[0], cvnegnew[1])
-    plt.show()
+        cvneg = data[(data[:,2*cycle-1] < 0)]
+        limneg  = np.argmin(cvneg[:,2*(cycle-1)]) #Find minimum potential to discard duplicates
+        limnegp = np.argmax(cvneg[:,2*(cycle-1)])
+        eneg = np.concatenate((cvneg[limneg::-1,2*(cycle-1)],cvneg[-1:limnegp:-1,2*(cycle-1)])) #organize lower values since the scan started at 0.1
+        ineg = np.concatenate((cvneg[limneg::-1,2*cycle-1],cvneg[-1:limnegp:-1,2*cycle-1]))
+
+        tckp = splrep(cvpos[:limpos,2*(cycle-1)], cvpos[:limpos,2*cycle-1], s=0) #Positive interpolation
+        tckn = splrep(eneg, ineg, s=0)
+    
+        xpos = np.linspace(cvpos[0,2*(cycle-1)], cvpos[limpos,2*(cycle-1)], 10000) #new potential values for interpolation
+        xneg = np.linspace(eneg[0], eneg[-1], 10000)
+        xavg = np.linspace(max(xpos[0], xneg[0]), min(xpos[-1], xneg[-1]), 10000) #potential values for average results, selecting the appropriate intervale in which both exist
+
+        
+        
+        ipos = splev(xpos, tckp, der=0)
+        ineg = splev(xneg, tckn, der=0)
+        iavg = (ipos-ineg)/2
+        inew = iavg-min(iavg[(xavg>0.3)*(xavg<0.4)])
+
+        plt.plot(xavg, inew)
+        
+        tcki = splrep(xavg, inew, s=0)
+        q[i] = splint(xavg[0], xavg[inew == 0], tcki) #integration from the lowest value to the start of hydrogen adsorption
+        print(q[i])
+    plt.show()      
+    return q
+
+qH = isog(3, 0, 0.7)
+
+print(qH)
+    # cvposnew = splev(u, tckp, der=0) #Interpolated current results in two values
+    
+    # tckn, v = splprep([cvneg[:,2*(cycle-1)], cvneg[:,2*cycle-1]], s=0) #Negative interpolation
+    # cvnegnew = splev(v, tckn, der=0)
+
+    # plt.plot(cvposnew[0], cvposnew[1])
+    # plt.show()
+
+    # qp = splint(0.0, 0.3, tckp)
+    # print(qp[1])
+
+    
 
 
 
@@ -51,10 +85,6 @@ for i in range(0,1): #will do a for cycle for the whole system
 
 '''
 
-Calculate charges and area
-def calcharge():
-cvneg = texto[texto[:,cycle] < 0]
-cvpos = texto[texto[:,cycle] > 0]
 
 area=0.05227
 F=96485
