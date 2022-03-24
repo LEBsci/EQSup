@@ -22,12 +22,21 @@ plt.rc('legend', fontsize=SMALL_SIZE)    # legend fontsize
 plt.rc('figure', titlesize=SMALL_SIZE)  # fontsize of the figure title
 plt.rc('figure', figsize=(8,8))
 
+def integ(x, i, tck, constant=-1):
+    out = np.zeros(x.shape)
+    sup = x[i == 0]
+    top = np.where(x == sup[0])[0][0]
+    for n in range(top):
+        out[n] = splint(x[0], x[n], tck)
+    # out += constant
+    return out
 
-def isog(cycle, lowerVertex, upperVertex):
+def isogQ(cycle):
     ifiles = sorted(glob.glob("*C.txt")) #First step import data files
     q = np.zeros(len(ifiles))
+    qx = np.zeros((len(ifiles),10000))
 
-    for i in range(0,len(ifiles)): #will do a for cycle for the whole system
+    for i in range(len(ifiles)): #will do a for cycle for the whole system
         data=np.loadtxt(ifiles[i], skiprows=1)
         
 
@@ -55,33 +64,22 @@ def isog(cycle, lowerVertex, upperVertex):
         iavg = (ipos-ineg)/2
         inew = iavg-min(iavg[(xavg>0.3)*(xavg<0.4)])
 
-        plt.plot(xavg, inew)
-        
         tcki = splrep(xavg, inew, s=0)
-        q[i] = splint(xavg[0], xavg[inew == 0], tcki) #integration from the lowest value to the start of hydrogen adsorption
-        print(q[i])
+        q[i] = splint(xavg[0], xavg[inew == 0], tcki)/0.05 #integration from the lowest value to the start of hydrogen adsorption
+        qx[i] = integ(xavg, inew, tcki)/0.05
+        plt.plot(xavg, qx[i])
     plt.show()      
-    return q
+    return q, qx
 
-qH = isog(3, 0, 0.7)
+qHNP = 230
+qH, qe = isogQ(3)
+areas = qH/(230)
+print(qe[0])
 
-print(qH)
-    # cvposnew = splev(u, tckp, der=0) #Interpolated current results in two values
-    
-    # tckn, v = splprep([cvneg[:,2*(cycle-1)], cvneg[:,2*cycle-1]], s=0) #Negative interpolation
-    # cvnegnew = splev(v, tckn, der=0)
-
-    # plt.plot(cvposnew[0], cvposnew[1])
-    # plt.show()
-
-    # qp = splint(0.0, 0.3, tckp)
-    # print(qp[1])
-
-    
-
-
-
-
+# def isogt():
+#     ifiles = sorted(glob.glob("*C.txt")) #First step import data files
+#     for i in range(len(ifiles)):
+#         thetaH[i] = qH[i] 
 
 '''
 
