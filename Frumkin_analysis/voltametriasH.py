@@ -1,7 +1,8 @@
+import string
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.interpolate import splrep, splev, splint
-import glob, os, random
+import glob, os
 from matplotlib import cm
 from matplotlib.colors import Normalize
 
@@ -22,23 +23,45 @@ plt.rc('legend', fontsize=SMALL_SIZE)    # legend fontsize
 plt.rc('figure', titlesize=SMALL_SIZE)  # fontsize of the figure title
 plt.rc('figure', figsize=(8,8))
 
+qML = 230 #Charge of a monolayer
+F = 96485 #Faraday constant
+R = 8.314 #Ideal  gas  constant
+qUPD  = 210 #hydrogen upd  charge
+
 def integ(x, i, tck, constant=-1):
     out = np.zeros(x.shape)
     sup = x[i == 0]
     top = np.where(x == sup[0])[0][0]
-    for n in range(top):
-        out[n] = splint(x[0], x[n], tck)
-    # out += constant
+    for n in range(top,-1,-1):
+        out[n] = splint(x[top], x[n], tck)
+    out *= constant
     return out
 
-def isogQ(cycle):
-    ifiles = sorted(glob.glob("*C.txt")) #First step import data files
-    q = np.zeros(len(ifiles))
-    qx = np.zeros((len(ifiles),10000))
+def plotfunctionE(nameExt):
+    plt.axhline(0, 0, 1, c = 'black')   #Se grafica el eje cero
+    plt.xlabel('$E$/V vs Pd/H') #Nombre de eje X
+    plt.legend(title='temperature / K')
+    plt.savefig('Figures/'+nameExt)
 
-    for i in range(len(ifiles)): #will do a for cycle for the whole system
+def plotfunctionT(nameExt):
+    plt.axhline(0, 0, 1, c = 'black')   #Se grafica el eje cero
+    plt.xlabel(r'$\theta$') #Nombre de eje X
+    plt.legend(title='temperature / K')
+    plt.savefig('Figures/'+nameExt)    
+
+def isogQ(cycle):
+    if not os.path.exists('Figures'):
+        os.mkdir('Figures')
+
+    ifiles = sorted(glob.glob("*C.txt")) #First step import data files
+    q,  temps, areas, lm = [np.zeros(len(ifiles)) for _ in range(4)] #defining zero vectors
+    qx, theta, xH, Q, DeltaG = [np.zeros((len(ifiles),10000)) for _ in range(5)]
+    
+    for i in range(len(ifiles)): #Cycle for potential values plots and calculations
+        temps[i] = 5*(i+1)+273
         data=np.loadtxt(ifiles[i], skiprows=1)
         
+
 
         cvpos = data[(data[:,2*cycle-1] > 0)] #Select positive currents 
         limpos = np.argmax(cvpos[:,2*(cycle-1)]) #Find maximum potential to discard duplicates
@@ -50,7 +73,7 @@ def isogQ(cycle):
         eneg = np.concatenate((cvneg[limneg::-1,2*(cycle-1)],cvneg[-1:limnegp:-1,2*(cycle-1)])) #organize lower values since the scan started at 0.1
         ineg = np.concatenate((cvneg[limneg::-1,2*cycle-1],cvneg[-1:limnegp:-1,2*cycle-1]))
 
-        tckp = splrep(cvpos[:limpos,2*(cycle-1)], cvpos[:limpos,2*cycle-1], s=0) #Positive interpolation
+        tckp = splrep(cvpos[:limpos,2*(cycle-1)], cvpos[:limpos,2*cycle-1], s=0) #Positive interpolation preparation
         tckn = splrep(eneg, ineg, s=0)
     
         xpos = np.linspace(cvpos[0,2*(cycle-1)], cvpos[limpos,2*(cycle-1)], 10000) #new potential values for interpolation
@@ -59,22 +82,57 @@ def isogQ(cycle):
 
         
         
-        ipos = splev(xpos, tckp, der=0)
+        ipos = splev(xpos, tckp, der=0) #Positive current interpolation
         ineg = splev(xneg, tckn, der=0)
-        iavg = (ipos-ineg)/2
-        inew = iavg-min(iavg[(xavg>0.3)*(xavg<0.4)])
+        iavg = (ipos-ineg)/2 #average current
+        inew = iavg-min(iavg[(xavg>0.3)*(xavg<0.4)]) #double layer correction
 
-        tcki = splrep(xavg, inew, s=0)
+        tcki = splrep(xavg, inew, s=0) #integration preparation for hydrogen section
         q[i] = splint(xavg[0], xavg[inew == 0], tcki)/0.05 #integration from the lowest value to the start of hydrogen adsorption
-        qx[i] = integ(xavg, inew, tcki)/0.05
-        plt.plot(xavg, qx[i])
-    plt.show()      
+        qx[i] = integ(xavg, inew, tcki)/0.05 #integrated charges
+        areas[i] = q[i]/(qUPD)
+        theta[i] = qx[i]/areas[i]/qML
+        xH[i] = xavg
+        
+        # xH[i] = xavg[0:np.where(xavg == xavg[inew == 0])[0][0]] #Hydrogen potentials for later  use
+        plt.figure(1)
+        plt.plot(xavg, inew/areas[i], label=int(temps[i]))
+        plt.figure(2)
+        plt.plot(xavg, qx[i]/areas[i], label=int(temps[i]))
+        plt.figure(3)
+        plt.plot(xavg, theta[i], label=int(temps[i]))
+    
+    plt.figure(1)
+    plt.ylabel(r'$j\,/\,\mathrm{\mu A \,cm^{-2}}$')
+    plotfunctionE('cv_avg.pdf')
+    plt.figure(2)
+    plt.ylabel(r'$q\,/\,\mathrm{\mu C \,cm^{-2}}$')
+    plt.ylim(-1)
+    plotfunctionE('charges.pdf')
+    plt.figure(3)
+    plt.ylabel(r'$\theta$')
+    plt.ylim(0)
+    plotfunctionE('coverage.pdf')
+
+    
+
+    for i in range(len(ifiles)):
+        
+        lm[i] = np.argmin(theta[i])-1
+        print(lm[i])
+        Q[i] = np.log(theta[i]/(1-theta[i]))
+        DeltaG[i] = -F*xH[i]-R*temps[i]*Q[i]
+        plt.figure(4)
+        plt.plot(theta[i][:int(lm[i])], -DeltaG[i][:int(lm[i])]/1000, label=int(temps[i]))
+    
+    plt.figure(4)
+    plt.ylabel(r'$-\Delta G\,/\,kJ\,mol^{-1}$')
+    plt.ylim(0)
+    plotfunctionT('dG.pdf')
+    plt.show()
     return q, qx
 
-qHNP = 230
 qH, qe = isogQ(3)
-areas = qH/(230)
-print(qe[0])
 
 # def isogt():
 #     ifiles = sorted(glob.glob("*C.txt")) #First step import data files
