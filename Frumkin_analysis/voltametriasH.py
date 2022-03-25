@@ -1,5 +1,5 @@
-import string
 import numpy as np
+from numpy.polynomial.polynomial import Polynomial as P
 import matplotlib.pyplot as plt
 from scipy.interpolate import splrep, splev, splint
 import glob, os
@@ -23,10 +23,13 @@ plt.rc('legend', fontsize=SMALL_SIZE)    # legend fontsize
 plt.rc('figure', titlesize=SMALL_SIZE)  # fontsize of the figure title
 plt.rc('figure', figsize=(8,8))
 
-qML = 230 #Charge of a monolayer
+
 F = 96485 #Faraday constant
 R = 8.314 #Ideal  gas  constant
 qUPD  = 210 #hydrogen upd  charge
+qstep = 27.19 #Charge of a monolayer on 110 steps
+qML = 217.15+qstep #Charge of a monolayer
+nu = 0.05 #Scan rate
 
 def integ(x, i, tck, constant=-1):
     out = np.zeros(x.shape)
@@ -54,8 +57,8 @@ def isogQ(cycle):
         os.mkdir('Figures')
 
     ifiles = sorted(glob.glob("*C.txt")) #First step import data files
-    q,  temps, areas, lm = [np.zeros(len(ifiles)) for _ in range(4)] #defining zero vectors
-    qx, theta, xH, Q, DeltaG = [np.zeros((len(ifiles),10000)) for _ in range(5)]
+    q,  temps, areas, lm, dG0, r = [np.zeros(len(ifiles)) for _ in range(6)] #defining zero vectors
+    qx, theta, xH, Q, DeltaG, Ec, jc, iH, thetaQ = [np.zeros((len(ifiles),10000)) for _ in range(9)]
     
     for i in range(len(ifiles)): #Cycle for potential values plots and calculations
         temps[i] = 5*(i+1)+273
@@ -87,13 +90,21 @@ def isogQ(cycle):
         iavg = (ipos-ineg)/2 #average current
         inew = iavg-min(iavg[(xavg>0.3)*(xavg<0.4)]) #double layer correction
 
+        # s = inew
+        # peaks, _ = find_peaks(s, height=0)
+
+        # plt.figure(5)
+        # plt.plot(s)
+        # plt.show()
+        # plt.close()
+
         tcki = splrep(xavg, inew, s=0) #integration preparation for hydrogen section
-        q[i] = splint(xavg[0], xavg[inew == 0], tcki)/0.05 #integration from the lowest value to the start of hydrogen adsorption
-        qx[i] = integ(xavg, inew, tcki)/0.05 #integrated charges
+        q[i] = splint(xavg[0], xavg[inew == 0], tcki)/nu #integration from the lowest value to the start of hydrogen adsorption
+        qx[i] = integ(xavg, inew, tcki)/nu #integrated charges
         areas[i] = q[i]/(qUPD)
         theta[i] = qx[i]/areas[i]/qML
         xH[i] = xavg
-        
+        iH[i] = inew
         # xH[i] = xavg[0:np.where(xavg == xavg[inew == 0])[0][0]] #Hydrogen potentials for later  use
         plt.figure(1)
         plt.plot(xavg, inew/areas[i], label=int(temps[i]))
@@ -102,6 +113,8 @@ def isogQ(cycle):
         plt.figure(3)
         plt.plot(xavg, theta[i], label=int(temps[i]))
     
+    
+
     plt.figure(1)
     plt.ylabel(r'$j\,/\,\mathrm{\mu A \,cm^{-2}}$')
     plotfunctionE('cv_avg.pdf')
@@ -114,22 +127,39 @@ def isogQ(cycle):
     plt.ylim(0)
     plotfunctionE('coverage.pdf')
 
-    
-
+    thetaNew = np.linspace(0.001, 0.999, 10000)
     for i in range(len(ifiles)):
-        
-        lm[i] = np.argmin(theta[i])-1
-        print(lm[i])
-        Q[i] = np.log(theta[i]/(1-theta[i]))
-        DeltaG[i] = -F*xH[i]-R*temps[i]*Q[i]
+        thetaQ[i] = theta[i][::-1] #Fix order of coverage to plot from less to more
+        lm[i] = len(theta[i]) - np.argmin(theta[i]) #Find the value where values start to be non zero
+        Q[i] = np.log(thetaQ[i]/(1-thetaQ[i]))
+        DeltaG[i] = -F*xH[i][::-1]-R*temps[i]*Q[i] #Calculate Gibbs energy with potential corresponding to each coverage
         plt.figure(4)
-        plt.plot(theta[i][:int(lm[i])], -DeltaG[i][:int(lm[i])]/1000, label=int(temps[i]))
+        plt.plot(thetaQ[i][int(lm[i]):], -DeltaG[i][int(lm[i]):]/1000, label=int(temps[i])) #Plot Gibbs energy
+        filtro = (thetaQ[i]>0.1)*(thetaQ[i]<0.4)*(thetaQ[i]!=0) #Filter for significant coverage values to fit from linear behavior
+        dG = DeltaG[i][filtro]
+        tH = thetaQ[i][filtro]
+        g = P.fit(tH, dG, 1) #polynomial fit
+        h = g.convert()
+        dG0[i] = h.coef[0] #intercept
+        r[i] = h.coef[1] #Slope
+        Ec[i] = -dG0[i]/F-R*temps[i]/F*np.log(thetaNew/(1-thetaNew))-r[i]/F*thetaNew #Calculated potential from coverage
+        jc[i] = (F/R/temps[i])*qML*nu*(thetaNew*(1-thetaNew))/(1+(r[i]/R/temps[i])*thetaNew*(1-thetaNew)) #Calculated current density from coverage
+
+        if i == 0 or i == len(ifiles)-1:
+            plt.figure(5)
+            plt.plot(Ec[i], jc[i],  '--', label=int(temps[i]))
+            plt.plot(xH[i], iH[i]/areas[i])
+
     
     plt.figure(4)
     plt.ylabel(r'$-\Delta G\,/\,kJ\,mol^{-1}$')
     plt.ylim(0)
     plotfunctionT('dG.pdf')
-    plt.show()
+    plt.figure(5)
+    plt.ylabel(r'$j\,/\, \mu A\, cm^{-2}$')
+    plt.xlim(-0.20,0.5)
+    plotfunctionE('icalc.pdf')
+    # plt.show()
     return q, qx
 
 qH, qe = isogQ(3)
