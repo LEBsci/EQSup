@@ -1,3 +1,4 @@
+from cmath import log
 import numpy as np
 from numpy.polynomial.polynomial import Polynomial as P
 import matplotlib.pyplot as plt
@@ -28,7 +29,7 @@ F = 96485 #Faraday constant
 R = 8.314 #Ideal  gas  constant
 qUPD  = 210 #hydrogen upd  charge
 qstep = 27.19 #Charge of a monolayer on 110 steps
-qML = 217.15+qstep #Charge of a monolayer
+qML = 217.15 #Charge of a monolayer on the terraces
 nu = 0.05 #Scan rate
 
 def integ(x, i, tck, constant=-1):
@@ -57,9 +58,10 @@ def isogQ(cycle):
         os.mkdir('Figures')
 
     ifiles = sorted(glob.glob("*C.txt")) #First step import data files
-    q,  temps, areas, lm, dG0, r = [np.zeros(len(ifiles)) for _ in range(6)] #defining zero vectors
+    q,  temps, areas, lm, dG0, r, fg = [np.zeros(len(ifiles)) for _ in range(7)] #defining zero vectors
     qx, theta, xH, Q, DeltaG, Ec, jc, iH, thetaQ = [np.zeros((len(ifiles),10000)) for _ in range(9)]
-    
+    dG2, om  = [np.zeros((len(ifiles),1000)) for _ in range(2)]
+
     for i in range(len(ifiles)): #Cycle for potential values plots and calculations
         temps[i] = 5*(i+1)+273
         data=np.loadtxt(ifiles[i], skiprows=1)
@@ -71,6 +73,10 @@ def isogQ(cycle):
         
 
         cvneg = data[(data[:,2*cycle-1] < 0)]
+
+        plt.figure(7)
+        plt.plot(data[:,2*(cycle-1)],data[:,2*cycle-1], label=temps[i]) 
+
         limneg  = np.argmin(cvneg[:,2*(cycle-1)]) #Find minimum potential to discard duplicates
         limnegp = np.argmax(cvneg[:,2*(cycle-1)])
         eneg = np.concatenate((cvneg[limneg::-1,2*(cycle-1)],cvneg[-1:limnegp:-1,2*(cycle-1)])) #organize lower values since the scan started at 0.1
@@ -93,7 +99,7 @@ def isogQ(cycle):
         # s = inew
         # peaks, _ = find_peaks(s, height=0)
 
-        # plt.figure(5)
+        # plt.figure(8)
         # plt.plot(s)
         # plt.show()
         # plt.close()
@@ -112,9 +118,9 @@ def isogQ(cycle):
         plt.plot(xavg, qx[i]/areas[i], label=int(temps[i]))
         plt.figure(3)
         plt.plot(xavg, theta[i], label=int(temps[i]))
-    
-    
-
+    plt.figure(7)
+    plt.ylabel(r'$j\,/\,\mathrm{\mu A \,cm^{-2}}$')
+    plotfunctionE('original.pdf')
     plt.figure(1)
     plt.ylabel(r'$j\,/\,\mathrm{\mu A \,cm^{-2}}$')
     plotfunctionE('cv_avg.pdf')
@@ -127,7 +133,10 @@ def isogQ(cycle):
     plt.ylim(0)
     plotfunctionE('coverage.pdf')
 
+    '''Giibs energy change calculations'''
+
     thetaNew = np.linspace(0.001, 0.999, 10000)
+    theta2 = np.linspace(0.1, 0.4, 1000) #Coverage for entropy calculations
     for i in range(len(ifiles)):
         thetaQ[i] = theta[i][::-1] #Fix order of coverage to plot from less to more
         lm[i] = len(theta[i]) - np.argmin(theta[i]) #Find the value where values start to be non zero
@@ -135,6 +144,9 @@ def isogQ(cycle):
         DeltaG[i] = -F*xH[i][::-1]-R*temps[i]*Q[i] #Calculate Gibbs energy with potential corresponding to each coverage
         plt.figure(4)
         plt.plot(thetaQ[i][int(lm[i]):], -DeltaG[i][int(lm[i]):]/1000, label=int(temps[i])) #Plot Gibbs energy
+        
+        '''Calculated current'''
+        
         filtro = (thetaQ[i]>0.1)*(thetaQ[i]<0.4)*(thetaQ[i]!=0) #Filter for significant coverage values to fit from linear behavior
         dG = DeltaG[i][filtro]
         tH = thetaQ[i][filtro]
@@ -150,7 +162,38 @@ def isogQ(cycle):
             plt.plot(Ec[i], jc[i],  '--', label=int(temps[i]))
             plt.plot(xH[i], iH[i]/areas[i])
 
+        
+        fg[i] = r[i]/(R*temps[i]) #Frumkin interaction parameter
+
+        '''Entropy change calculations'''
+
+        tcks = splrep(tH, dG, s=0)
+        
+        for k in range(len(theta2)):
+            dG2[i,k] = splev(theta2[k], tcks, der=0)
+            om[i,k] = splev(theta2[k], tcks, der=1) #Frumkin type lateral interaction parameter
+
+    '''Continuation of entropy change calculations'''
+    dS, dom, sdif = [np.zeros(len(theta2)) for _ in range(3)]
+
+    for k in range(len(theta2)):
+        pdS = P.fit(temps, dG2[:,k], 1)
+        pdS2 = pdS.convert()
+        dS[k] = -pdS2.coef[1]
+        pdom = P.fit(temps, om[:,k], 1)
+        pdom2 = pdom.convert()
+        dom[k] = pdom2.coef[1]
+        sdif[k]=dS[0]-dom[k]*theta2[k]-R*np.log(theta2[k]/(1-theta2[k]))
     
+        
+    print(sdif)
+
+    
+    plt.figure(6)
+    plt.plot(theta2, dS)
+    plt.figure(8)
+    plt.scatter(theta2, sdif)
+
     plt.figure(4)
     plt.ylabel(r'$-\Delta G\,/\,kJ\,mol^{-1}$')
     plt.ylim(0)
@@ -159,10 +202,16 @@ def isogQ(cycle):
     plt.ylabel(r'$j\,/\, \mu A\, cm^{-2}$')
     plt.xlim(-0.20,0.5)
     plotfunctionE('icalc.pdf')
+    plt.figure(6)
+    plt.ylabel(r'$\Delta S\,/\,J\,mol^{-1}\,K^{-1}$')
+    plotfunctionT('dS.pdf')
+    plt.figure(8)
+    plt.ylabel(r'$S^{diff}\,/\,J\,mol^{-1}\,K^{-1}$')
+    plotfunctionT('dS2.pdf')
     # plt.show()
-    return q, qx
+    return q, qx, fg, dS, areas, dom
 
-qH, qe = isogQ(3)
+qH, qe, r, dS,  A, domega= isogQ(3)
 
 # def isogt():
 #     ifiles = sorted(glob.glob("*C.txt")) #First step import data files
